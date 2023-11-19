@@ -173,7 +173,7 @@ def main():
     # Loop until all vertices in the graph have been visited
     while len(visited) < len(graph.vertices):
         visited.add(current_vertex)
-        # Gets the nearest unvisited vertex and the time to get there
+        # Get the nearest unvisited vertex and the time to get there
         next_vertex, minutes = find_nearest_unvisited(graph, current_vertex, visited)
         
         # End loop when there no more unvisited vertices
