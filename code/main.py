@@ -1,111 +1,44 @@
 import pandas as pd
-import heapq
-import os
-from dotenv import load_dotenv
+from graph import Graph
+from vertex import Vertex
 
-class Vertex:
+def generate_graph(path):
     """
-    A class that represents a vertex in a graph. 
-    Each vertex really just represents the name of the breweries we are interested in.
+    Generates the graph data from the excel file with our breweries and walking distances.
+
+    args: 
+    path: Path to the excel file with the data.
+
+    returns:
+    graph (Graph): a dictionary representing the graph. Each key is a location, 
+    and its value is a dictionary of neighboring locations and their corresponding walk distance values.
     """
+    graph = Graph()
+    graph_data = pd.read_excel(path, index_col=0)
 
-    def __init__(self, name):
-        self.name = name
+    # Add the vertices
+    vertices = {name: Vertex(name) for name in graph_data.columns}
+    for vertex in vertices.values():
+        graph.add_vertex(vertex)
 
-    def __str__(self):
-        return self.name
-    
-    def __repr__(self):
-        return self.name
+    # Add the edges
+    for i in graph_data.index:
+        for j in graph_data.columns:
+            i = i.strip() # Removes any extra spaces in the spreadsheet.
+            j = j.strip()
+            if i != j and pd.notna(graph_data.at[i, j]):
+                weight = graph_data.at[i, j]
+                graph.add_edge(vertices[i], vertices[j], weight)
 
-class Graph:
-    """
-    A class to represent a graph, or in the context of the project, our cluster of breweries.
-    Each brewery is a vertex and the edges are the walking distances between them. 
-    """
+    return graph, vertices
 
-    def __init__(self):
-        self.vertices = set()
-        self.edges =  {}
-
-    # Method to add a vertex to the graph.
-    def add_vertex(self, vertex):
-        self.vertices.add(vertex)
-        if vertex not in self.edges:
-            self.edges[vertex] = {}
-    
-    # Method to add an edge to the graph. 
-    def add_edge(self, vertex_a, vertex_b, weight):
-        if vertex_a != vertex_b: # we don't want to consider self loops
-            self.edges[vertex_a][vertex_b] = weight
-    
-    # String representation of a graph as an adjacency list.
-    def __str__(self):
-        graph = "Graph:\n"
-        for vertex in self.vertices:
-            connections = [f"{str(neighbor)}({self.edges[vertex].get(neighbor, 'NA')})" for neighbor in self.vertices if neighbor != vertex]
-            graph += f"{str(vertex)} -> {', '.join(connections)}\n"
-        return graph
-
-    def dijkstra(self, start_vertex):
-        '''
-        Implementation of Dijkstra's algorithm
-        Parameters: Starting vertex
-        Return: Dictionary of shortest distances from start to all other vertices
-        '''
-        # Set all distances to positive infinity 
-        distances = {}
-        for vertex in self.vertices:
-            distances[vertex] = float('inf')
-        distances[start_vertex] = 0
-
-        # Create priority queue and add starting vertex with distance of 0
-        priority_queue = []
-        heapq.heappush(priority_queue, (0, start_vertex.name))
-
-        # Keep track of visited vertices
-        visited = set()
-
-        # Loop until queue is empty
-        while len(priority_queue) > 0:
-            # Pop the vertex with the smallest distance
-            current = heapq.heappop(priority_queue)
-            current_distance = current[0]
-            current_vertex_name = current[1]
-            current_vertex = None
-            
-            # Find the vertex object based on the name
-            for vertex in self.vertices:
-                if vertex.name == current_vertex_name:
-                    current_vertex = vertex
-                    break
-
-            # Check if vertex has been visited
-            if current_vertex in visited:
-                continue
-
-            # Mark current vertex as visited
-            visited.add(current_vertex)
-
-            # Check all neighbors of current vertex
-            for neighbor in self.edges[current_vertex]:
-                weight = self.edges[current_vertex][neighbor]
-                # Calculate the new potential distance to this neighbor
-                new_distance = current_distance + weight
-
-                # If new distance is less than the previous
-                if new_distance < distances[neighbor]:
-                    # Update the distance to this neighbor
-                    distances[neighbor] = new_distance
-                    # Add neighbor to priority queue
-                    heapq.heappush(priority_queue, (new_distance, neighbor.name))
-
-        return distances
 
 def find_nearest_unvisited(graph, start_vertex, visited):
     '''
     Uses Dijkstra's algorithm to find the nearest unvisited vertex. 
+
     Parameters: a graph, a starting vertex, and a list of visited vertices
+    
     Return: The nearest unvisited vertex and its distance from the start_vertex
     '''
 
@@ -124,75 +57,74 @@ def find_nearest_unvisited(graph, start_vertex, visited):
 
     return nearest, min_distance
 
-def generate_graph(path):
-    """
-    Generates the graph data from the excel file with our breweries and walking distances.
 
-    args: 
-    path: Path to the excel file with the data.
+def crawl(graph, start_vertex_name, max_breweries=None, max_walking_time=None, time_limit=None, time_at_each=10):
+    """
+    Constructs a path through the graph using the nearest neighbor approach, starting from the given vertex.
+    The path may be constrained by the minimum and maximum number of breweries to visit, the maximum walking time, or the overall time limit.
+
+    args:
+    graph (Graph): the graph representing the network of breweries and the walking times between them.
+    start_vertex_name (string): the name of the starting vertex (brewery) for the crawl.
+    max_breweries (integer, optional): maximum number of breweries to include in the crawl.
+    max_walking_time (int, optional): maximum total walking time desired for the crawl (in minutes).
+    time_limit (int, optional): maximum total time for the crawl (in minutes), including time spent at each brewery.
 
     returns:
-    graph: a dictionary representing the graph. Each key is a location, 
-    and its value is a dictionary of neighboring locations and their corresponding walk distance values.
+    tuple: A list representing the path of vertices visited and the total time of the crawl.
     """
-    graph = Graph()
-    graph_data = pd.read_excel(path, index_col=0)
+    start_vertex = graph.vertices_dict[start_vertex_name] 
+    visited = set() # need to track visited vertices to avoid revisits
+    path = [start_vertex] # initialize path with the start vertex
+    total_time_spent = 0 # time spent in total (including time at each brewery and walking time)
+    total_walk_time = 0 # time spent walking (not including time at each brewery)
+    brewery_count = 0 # number of breweries visited
 
-    # Add the vertices
-    vertices = {name: Vertex(name) for name in graph_data.columns}
-    for vertex in vertices.values():
-        graph.add_vertex(vertex)
-        # print(f"Added vertex: {vertex}")  # To help with debugging
+    while True:
+        current_vertex = path[-1] # current position in the crawl
+        visited.add(current_vertex) # count it as visited
 
-    # Add the edges
-    for i in graph_data.index:
-        for j in graph_data.columns:
-            i = i.strip() # Removes any extra spaces in the spreadsheet.
-            j = j.strip()
-            if i != j and pd.notna(graph_data.at[i, j]):
-                weight = graph_data.at[i, j]
-                graph.add_edge(vertices[i], vertices[j], weight)
+        # find the nearest unvisited vertex
+        nearest, distance = find_nearest_unvisited(graph, current_vertex, visited)
 
-    return graph, vertices
-
-def main():
-    load_dotenv()
-    path = os.getenv('DATA_PATH')
-    graph, vertices = generate_graph(path) 
-
-    start_vertex_name = "Roux Institute"
-
-    # Get start vertex object from dictionary of vertices
-    start_vertex = vertices[start_vertex_name]
-
-    visited = set()
-    current_vertex = start_vertex
-    walking_path = [current_vertex]
-    total_time = 0
-
-    # Loop until all vertices in the graph have been visited
-    while len(visited) < len(graph.vertices):
-        visited.add(current_vertex)
-        # Get the nearest unvisited vertex and the time to get there
-        next_vertex, minutes = find_nearest_unvisited(graph, current_vertex, visited)
-        
-        # End loop when there no more unvisited vertices
-        if next_vertex is None:
+        # if there are no more unvisited vertices, or if the nearest vertex is already visited, stop
+        if nearest is None or nearest in visited:
             break
         
-        walking_path.append(next_vertex)
-        total_time += minutes
-        current_vertex = next_vertex
+        # if the nearest vertex is not the Roux Institute, add the time spent at each brewery to the total time spent
+        # we don't add time spent at the Roux Institute because in this context as it isn't a brewery. 
+        next_vertex_time = total_time_spent + distance + (time_at_each if nearest.name != "Roux Institute" else 0)
 
-    print("Walking tour path: ", end="")
-    first_vertex = True
-    for vertex in walking_path:
-        if first_vertex == False:
-            print(" -> ", end="")
-        print(vertex.name, end="")
-        first_vertex = False
+        # if the next vertex would violate any of the constraints, stop
+        if (max_walking_time is not None and total_walk_time + distance > max_walking_time) or \
+           (max_breweries is not None and brewery_count >= max_breweries) or \
+           (time_limit is not None and next_vertex_time > time_limit):
+            break
+        
+        # add the nearest vertex to the path and update the total time spent and total walk time
+        path.append(nearest)
+        total_walk_time += distance
+        total_time_spent += distance
 
-    print("\n Total travel time:", total_time, "minutes") 
+        # increment brewery count and add time at the brewery if it's not the Roux Institute
+        if nearest.name != "Roux Institute":
+            brewery_count += 1
+            total_time_spent += time_at_each
+
+    return path, total_time_spent, total_walk_time
+
+def main():
+   
+    path = '../cs5800-project/data/Data.xlsx'
+    graph, vertices = generate_graph(path) 
+    start_vertex_name = "Roux Institute"
+
+    #Get a route following a nearest neighbor solution.
+    path, total_time_spent, total_walk_time = crawl(graph, start_vertex_name)
+    print("\nWalking tour path via Traveling Salesman/neighbor: ", " -> ".join(vertex.name for vertex in path))
+    print("Total time spent: ", total_time_spent)
+    print("Total travel time:", total_walk_time, "minutes")
+    print("\n")
 
 if __name__ == '__main__':
     main()
