@@ -1,4 +1,7 @@
 import pandas as pd
+import heapq
+import os
+from dotenv import load_dotenv
 
 class Vertex:
     """
@@ -42,8 +45,85 @@ class Graph:
         for vertex in self.vertices:
             connections = [f"{str(neighbor)}({self.edges[vertex].get(neighbor, 'NA')})" for neighbor in self.vertices if neighbor != vertex]
             graph += f"{str(vertex)} -> {', '.join(connections)}\n"
-        return  graph
+        return graph
+
+    def dijkstra(self, start_vertex):
+        '''
+        Implementation of Dijkstra's algorithm
+        Parameters: Starting vertex
+        Return: Dictionary of shortest distances from start to all other vertices
+        '''
+        # Set all distances to positive infinity 
+        distances = {}
+        for vertex in self.vertices:
+            distances[vertex] = float('inf')
+        distances[start_vertex] = 0
+
+        # Create priority queue and add starting vertex with distance of 0
+        priority_queue = []
+        heapq.heappush(priority_queue, (0, start_vertex.name))
+
+        # Keep track of visited vertices
+        visited = set()
+
+        # Loop until queue is empty
+        while len(priority_queue) > 0:
+            # Pop the vertex with the smallest distance
+            current = heapq.heappop(priority_queue)
+            current_distance = current[0]
+            current_vertex_name = current[1]
+            current_vertex = None
+            
+            # Find the vertex object based on the name
+            for vertex in self.vertices:
+                if vertex.name == current_vertex_name:
+                    current_vertex = vertex
+                    break
+
+            # Check if vertex has been visited
+            if current_vertex in visited:
+                continue
+
+            # Mark current vertex as visited
+            visited.add(current_vertex)
+
+            # Check all neighbors of current vertex
+            for neighbor in self.edges[current_vertex]:
+                weight = self.edges[current_vertex][neighbor]
+                # Calculate the new potential distance to this neighbor
+                new_distance = current_distance + weight
+
+                # If new distance is less than the previous
+                if new_distance < distances[neighbor]:
+                    # Update the distance to this neighbor
+                    distances[neighbor] = new_distance
+                    # Add neighbor to priority queue
+                    heapq.heappush(priority_queue, (new_distance, neighbor.name))
+
+        return distances
+
+def find_nearest_unvisited(graph, start_vertex, visited):
+    '''
+    Uses Dijkstra's algorithm to find the nearest unvisited vertex. 
+    Parameters: a graph, a starting vertex, and a list of visited vertices
+    Return: The nearest unvisited vertex and its distance from the start_vertex
+    '''
+
+    distances = graph.dijkstra(start_vertex)
+
+    nearest = None
+    min_distance = float('inf')
     
+    # Loop through distance dictionary
+    for vertex, distance in distances.items():
+        # If the vertex has not been visited and its distance is less than the current minimum
+        if vertex not in visited and distance < min_distance:
+            # Update nearest vertex and minimum distance
+            nearest = vertex
+            min_distance = distance
+
+    return nearest, min_distance
+
 def generate_graph(path):
     """
     Generates the graph data from the excel file with our breweries and walking distances.
@@ -62,6 +142,7 @@ def generate_graph(path):
     vertices = {name: Vertex(name) for name in graph_data.columns}
     for vertex in vertices.values():
         graph.add_vertex(vertex)
+        # print(f"Added vertex: {vertex}")  # To help with debugging
 
     # Add the edges
     for i in graph_data.index:
@@ -72,18 +153,46 @@ def generate_graph(path):
                 weight = graph_data.at[i, j]
                 graph.add_edge(vertices[i], vertices[j], weight)
 
-    return graph
+    return graph, vertices
 
 def main():
+    load_dotenv()
+    path = os.getenv('DATA_PATH')
+    graph, vertices = generate_graph(path) 
 
-    path = '../cs5800-project/data/Data.xlsx'
-    graph = generate_graph(path)
-    print(graph)
+    start_vertex_name = "Roux Institute"
+
+    # Get start vertex object from dictionary of vertices
+    start_vertex = vertices[start_vertex_name]
+
+    visited = set()
+    current_vertex = start_vertex
+    walking_path = [current_vertex]
+    total_time = 0
+
+    # Loop until all vertices in the graph have been visited
+    while len(visited) < len(graph.vertices):
+        visited.add(current_vertex)
+        # Get the nearest unvisited vertex and the time to get there
+        next_vertex, minutes = find_nearest_unvisited(graph, current_vertex, visited)
+        
+        # End loop when there no more unvisited vertices
+        if next_vertex is None:
+            break
+        
+        walking_path.append(next_vertex)
+        total_time += minutes
+        current_vertex = next_vertex
+
+    print("Walking tour path: ", end="")
+    first_vertex = True
+    for vertex in walking_path:
+        if first_vertex == False:
+            print(" -> ", end="")
+        print(vertex.name, end="")
+        first_vertex = False
+
+    print("\n Total travel time:", total_time, "minutes") 
 
 if __name__ == '__main__':
     main()
-
-
-
-
-
