@@ -35,14 +35,24 @@ class Graph:
     def dijkstra(self, start_vertex):
         '''
         Implementation of Dijkstra's algorithm
+
         Parameters: Starting vertex
-        Return: Dictionary of shortest distances from start to all other vertices
+
+        Return: A tuple of two dictionaries - distances and predecessors
+
+        distances: A dictionary of distances from the starting vertex to each vertex in the graph
+        predecessors: A dictionary of predecessors for each vertex in the the shortest path from the starting vertex
         '''
-        # Set all distances to positive infinity 
+        # Initialize distances dictionary, and set all distances to positive infinity 
         distances = {}
         for vertex in self.vertices:
             distances[vertex] = float('inf')
         distances[start_vertex] = 0
+
+        # Initialize predecessors dictionary
+        predecessors = {}
+        for vertex in self.vertices:
+            predecessors[vertex] = None
 
         # Create priority queue and add starting vertex with distance of 0
         priority_queue = []
@@ -78,11 +88,10 @@ class Graph:
                 # Calculate the new potential distance to this neighbor
                 new_distance = current_distance + weight
 
-                # If new distance is less than the previous
+                # Update the distance and predecesseor if a shorter path is found
                 if new_distance < distances[neighbor]:
-                    # Update the distance to this neighbor
                     distances[neighbor] = new_distance
-                    # Add neighbor to priority queue
+                    predecessors[neighbor] = current_vertex
                     heapq.heappush(priority_queue, (new_distance, neighbor.name))
 
-        return distances
+        return distances, predecessors
