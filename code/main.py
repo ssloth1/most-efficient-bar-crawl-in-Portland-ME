@@ -128,7 +128,7 @@ def print_crawl_info(graph, start_vertex_name, max_breweries=None, max_walking_t
     """
     path, total_time_spent, total_walk_time = crawl(graph, start_vertex_name, max_breweries, max_walking_time, time_limit, time_at_each)
 
-    print("\nWalking tour path via Traveling Salesman/neighbor: ", " -> ".join(vertex.name for vertex in path))
+    print("\nWalking tour path via Traveling Salesman/neighbor: ", " --> ".join(vertex.name for vertex in path))
     print("Total time spent: ", total_time_spent)
     print("Total travel time:", total_walk_time, "minutes")
     print("\n")
@@ -147,6 +147,10 @@ def print_shortest_path_info(graph, start_vertex, destination_vertex):
 
     total_distance = distances[destination_vertex]
 
+    if total_distance == float('inf'):
+        print(f"No path from {start_vertex.name} to {destination_vertex.name}")
+        return
+
     # Construct the shortest path
     path = []
     current_vertex = destination_vertex
@@ -161,7 +165,7 @@ def print_shortest_path_info(graph, start_vertex, destination_vertex):
 
 def main():
     
-    # This is the path to the vanilla spreadsheet of our walking distances. 
+    # This is the path to the vanilla spreadsheet of our walking times. 
     # The only thing different about this one is there are no edges directed toward the Roux Institute.
     path = '../cs5800-project/data/Data.xlsx'
 
@@ -171,11 +175,13 @@ def main():
     graph1, vertices1 = generate_graph(path, max_weight_threshold=10)
     print_shortest_path_info(graph1, vertices1["Roux Institute"], vertices1["Belleflower"])
 
+    print("\n ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ \n")
+
     # Demonstrates the heuristic/traveling salesman approach to our problem.
     # Currently, this offers more constraints than the purely Dijkstra approach, 
     # including a max number of breweries, max walking time, and overall time limit.
     graph2, vertices2 = generate_graph(path)
-    print_crawl_info(graph2, "Roux Institute")
+    print_crawl_info(graph2, "Roux Institute", max_breweries=5, max_walking_time=60, time_limit=120, time_at_each=10)
 
 if __name__ == '__main__':
     main()
